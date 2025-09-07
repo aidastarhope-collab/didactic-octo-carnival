@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Hearts Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;text-align:center;background:#252b2e;color:#111}
+  h1{margin:20px 0}
+  .hud{display:flex;gap:16px;justify-content:center;margin:8px 0 0;font-weight:600}
+  canvas{background:#0d2a44;border:2px solid #4e708e;margin:16px auto;display:block;max-width:90vw}
+  #nextBtn{display:none;margin:8px auto 16px;padding:10px 16px;font-weight:700;border:0;border-radius:10px;background:#0d2a44;cursor:pointer}
+  #nextBtn:hover{background:#0d2a44}
+  .controls{margin:16px 0;padding:0 16px}
+  .controls p{margin:8px 0;font-size:14px;color:#666}
+  a{color:#111;text-decoration:none}
+  
+  /* Touch Controls */
+  .touch-controls{display:none;margin:16px 0;gap:16px;justify-content:center}
+  .touch-btn{padding:12px 20px;font-size:18px;border:0;border-radius:10px;background:#6787a2;color:white;font-weight:700;cursor:pointer;user-select:none}
+  .touch-btn:hover{background:#0d2a44}
+  .touch-btn:active{transform:scale(0.95)}
+  
+  @media (max-width: 768px) {
+    .touch-controls{display:flex}
+  }
+</style>
+</head>
+<body>
+  <h1>hearts collect</h1>
+  <div class="hud">
+    <div>Score: <span id="scoreEl">0</span></div>
+    <div>Zeit: <span id="timeEl">20</span>s</div>
+  </div>
+
+  <canvas id="game" width="400" height="400"></canvas>
+
+  <div class="touch-controls">
+    <button class="touch-btn" id="leftBtn">⬅️ left</button>
+    <button class="touch-btn" id="rightBtn">➡️ right</button>
+  </div>
+
+  <button id="nextBtn" onclick="window.location.href='letters.html'">continue</button>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('scoreEl');
+  const timeEl = document.getElementById('timeEl');
+  const nextBtn = document.getElementById('nextBtn');
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+
+  // --------- Spieler (Körbchen) ---------
+  const BASKET_W = 60;   // <- hier Größe anpassen
+  const BASKET_H = 60;
+  const player = { x: 180, y: 340, w: BASKET_W, h: BASKET_H, speed: 20 };
+
+  const basketImg = new Image();
+  basketImg.src = "basket.png"; // dein Körbchen-Bild
+
+  // --------- Herz-Bilder vorladen (Startbedingung) ---------
+  const heartSources = ["blue-heart.png", "pink-heart.png"];
+  const heartImages = [];
+
+  let loadedCount = 0;
+  let playableCount = 0;
+  function tryStart() {
+    // Start, sobald mind. ein Herzbild vorhanden ist
+    if (loadedCount === heartSources.length && playableCount > 0) startGame();
+  }
+
+  heartSources.forEach(src => {
+    const img = new Image();
+    img.onload    = () => { playableCount++; loadedCount++; tryStart(); };
+    img.onerror   = () => { console.warn("Bild konnte nicht geladen werden:", src); loadedCount++; tryStart(); };
+    img.src = src;
+    heartImages.push(img);
+  });
+
+  // --------- Game State ---------
+  let hearts = [];
+  let score = 0;
+  let timeLeft = 25;
+  let gameOver = false;
+
+  // Obergrenze für Spawn-Anzahl
+  let heartCount = 0;
+  const maxHearts = 40; // <— hier gewünschte Max-Anzahl einstellen
+
+  let spawner = null;
+  let stopCheck = null;
+  let timer = null;
+
+  function startGame(){
+    // Timer
+    timer = setInterval(()=>{
+      if(timeLeft > 0){
+        timeLeft--; timeEl.textContent = timeLeft;
+      } else {
+        clearInterval(timer);
+        gameOver = true;
+        sessionStorage.setItem('heartScore', String(score));
+        nextBtn.style.display = 'inline-block';
+      }
+    }, 1000);
+
+    // Spawns
+    spawner = setInterval(spawnHeart, 800);
+
+    // Sicherheits-Stopp bei Game Over
+    stopCheck = setInterval(()=>{
+      if(gameOver){ clearInterval(spawner); clearInterval(stopCheck); }
+    }, 300);
+
+    loop();
+  }
+
+  function spawnHeart(){
+    if(gameOver) return;
+    if(heartCount >= maxHearts) return; // Obergrenze
+
+    const available = heartImages.filter(i => i.complete && i.naturalWidth > 0);
+    if (available.length === 0) return;
+
+    const img = available[Math.floor(Math.random() * available.length)];
+    hearts.push({
+      x: Math.random()* (400 - 24),
+      y: -24,
+      vy: 1.6 + Math.random()*1.4,
+      img
+    });
+
+    heartCount++;
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,400,400);
+
+    // Spieler (Körbchen oder Fallback-Rechteck)
+    if (basketImg.complete && basketImg.naturalWidth > 0) {
+      ctx.drawImage(basketImg, player.x, player.y, player.w, player.h);
+    } else {
+      ctx.fillStyle = 'yellow';
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+    }
+
+    // Herzen
+    hearts.forEach(h => {
+      if (h.img.complete && h.img.naturalWidth > 0) {
+        ctx.drawImage(h.img, h.x, h.y, 24, 24);
+      }
+    });
+
+    // HUD
+    ctx.fillStyle = '#111';
+    ctx.font = '14px Arial';
+    ctx.fillText('Score: ' + score, 10, 20);
+    ctx.fillText('Zeit: ' + timeLeft + 's', 330, 20);
+
+    if(gameOver){
+      ctx.fillStyle = '#111';
+      ctx.font = '22px Arial';
+      ctx.fillText('⏳ time is over!', 105, 200);
+      ctx.fillText('Endscore: ' + score, 135, 230);
+    }
+  }
+
+  function update(){
+    if(gameOver) return;
+    hearts.forEach(h => h.y += h.vy);
+
+    // Kollisionen (mit Körbchen-Mitte & Herz-Mitte)
+    hearts = hearts.filter(h => {
+      if(h.y > 424) return false;
+      const heartCx = h.x + 12, heartCy = h.y + 12;
+      const withinX = heartCx > player.x && heartCx < player.x + player.w;
+      const withinY = heartCy > player.y && heartCy < player.y + player.h + 10;
+      if(withinX && withinY){
+        score++;
+        scoreEl.textContent = score;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function loop(){
+    update(); draw();
+    requestAnimationFrame(loop);
+  }
+
+  // --------- Steuerung ---------
+  function moveLeft(){
+    if(gameOver) return;
+    player.x = Math.max(0, player.x - player.speed);
+  }
+  function moveRight(){
+    if(gameOver) return;
+    player.x = Math.min(400 - player.w, player.x + player.speed);
+  }
+
+  window.addEventListener('keydown', e=>{
+    if(e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+      e.preventDefault();
+    }
+    if(e.key === 'ArrowLeft') moveLeft();
+    if(e.key === 'ArrowRight') moveRight();
+  }, { passive:false });
+
+  leftBtn.addEventListener('click', moveLeft);
+  rightBtn.addEventListener('click', moveRight);
+  leftBtn.addEventListener('touchstart', e => {e.preventDefault(); moveLeft();}, {passive:false});
+  rightBtn.addEventListener('touchstart', e => {e.preventDefault(); moveRight();}, {passive:false});
+})();
+</script>
